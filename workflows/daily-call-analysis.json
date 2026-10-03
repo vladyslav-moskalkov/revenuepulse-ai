@@ -1,0 +1,519 @@
+{
+  "name": "Щоденний AI-аналіз голосових розмов",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -544,
+        128
+      ],
+      "id": "306d0164-8281-489f-9fee-9757f7791063",
+      "name": "Щоденний запуск аналізу"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "CallAnalysis"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "analysis_status",
+              "lookupValue": "pending"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -288,
+        128
+      ],
+      "id": "cb429b5a-65ad-4b2b-b2b2-395a22029b24",
+      "name": "Отримання транскрипцій для аналізу"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -64,
+        128
+      ],
+      "id": "38209bf1-d4f4-4e07-b0f1-59a49aa17e53",
+      "name": "Обробка транскрипцій по черзі"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        32,
+        336
+      ],
+      "id": "27955de2-6626-49ec-a0d3-c9c6cc58abd5",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"result\": {\n      \"type\": \"string\",\n      \"enum\": [\"Успішно\", \"Частково\", \"Неуспішно\"]\n    },\n    \"ai_score\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 100\n    },\n    \"lead_temperature\": {\n      \"type\": \"string\",\n      \"enum\": [\"Cold\", \"Warm\", \"Hot\"]\n    },\n    \"budget\": {\n      \"type\": \"string\"\n    },\n    \"authority\": {\n      \"type\": \"string\"\n    },\n    \"need\": {\n      \"type\": \"string\"\n    },\n    \"timeline\": {\n      \"type\": \"string\"\n    },\n    \"pain\": {\n      \"type\": \"string\"\n    },\n    \"decision_maker\": {\n      \"type\": \"string\"\n    },\n    \"customer_objections\": {\n      \"type\": \"string\"\n    },\n    \"agent_errors\": {\n      \"type\": \"string\"\n    },\n    \"successful_pattern\": {\n      \"type\": \"string\"\n    },\n    \"summary\": {\n      \"type\": \"string\"\n    },\n    \"next_step\": {\n      \"type\": \"string\"\n    },\n    \"sentiment\": {\n      \"type\": \"string\",\n      \"enum\": [\"Positive\", \"Neutral\", \"Negative\"]\n    }\n  },\n  \"required\": [\n    \"result\",\n    \"ai_score\",\n    \"lead_temperature\",\n    \"budget\",\n    \"authority\",\n    \"need\",\n    \"timeline\",\n    \"pain\",\n    \"decision_maker\",\n    \"customer_objections\",\n    \"agent_errors\",\n    \"successful_pattern\",\n    \"summary\",\n    \"next_step\",\n    \"sentiment\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        336,
+        336
+      ],
+      "id": "9ea7a583-3f0e-43e4-9c5a-d016549424e8",
+      "name": "Структурований результат аналізу"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Проаналізуй голосову розмову відділу продажів.\n\nДані дзвінка:\n- conversation_id: {{ $json.conversation_id }}\n- lead_key: {{ $json.lead_key }}\n- клієнт: {{ $json.client_name }}\n- компанія: {{ $json.company }}\n- телефон: {{ $json.phone }}\n\nТРАНСКРИПЦІЯ:\n{{ $json.transcript || $json.summary }}\n\nВизнач BANT-кваліфікацію, результат розмови, заперечення клієнта,\nпомилки агента, успішні прийоми, сентимент і рекомендований наступний крок.\nАналізуй тільки факти, які присутні у транскрипції.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Ти — AI-аналітик відділу продажів RevenuePulse AI.\n\nТвоє завдання — об’єктивно аналізувати транскрипції голосових розмов.\n\nПравила:\n1. Використовуй тільки інформацію з переданого тексту розмови.\nЯкщо повна транскрипція недоступна, аналізуй переданий summary як тестовий матеріал.\n2. Не вигадуй бюджет, повноваження, потребу, строки або домовленості.\n3. Якщо інформації немає, поверни порожній рядок.\n4. Оцінюй BANT за чотирма критеріями:\n   - Budget — максимум 25 балів.\n   - Authority — максимум 25 балів.\n   - Need — максимум 25 балів.\n   - Timeline — максимум 25 балів.\n5. Для кожного критерію:\n   - 25 — чітко підтверджено;\n   - 10 — є непрямі або неповні дані;\n   - 0 — інформації немає.\n6. ai_score — сума чотирьох BANT-оцінок від 0 до 100.\n7. lead_temperature:\n   - Hot: 70–100;\n   - Warm: 40–69;\n   - Cold: 0–39.\n8. result:\n   - Успішно — потреба підтверджена і погоджений конкретний наступний крок;\n   - Частково — отримана корисна інформація, але немає чіткої домовленості;\n   - Неуспішно — змістовної кваліфікації не відбулося.\n9. sentiment має бути тільки Positive, Neutral або Negative.\n10. Відповідь повинна суворо відповідати підключеній JSON-схемі.",
+          "returnIntermediateSteps": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        160,
+        128
+      ],
+      "id": "66be8c3f-6c3b-4553-b85d-ab2406e83de1",
+      "name": "AI-аналіз голосової розмови"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "CallAnalysis"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $('Обробка транскрипцій по черзі').item.json.conversation_id }}",
+            "lead_key": "={{ $('Обробка транскрипцій по черзі').item.json.lead_key }}",
+            "transcript": "={{ $('Обробка транскрипцій по черзі').item.json.summary }}",
+            "result": "={{ $json.output.result }}",
+            "ai_score": "={{ $json.output.ai_score }}",
+            "lead_temperature": "={{ $json.output.lead_temperature }}",
+            "budget": "={{ $json.output.budget }}",
+            "authority": "={{ $json.output.authority }}",
+            "need": "={{ $json.output.need }}",
+            "timeline": "={{ $json.output.timeline }}",
+            "pain": "={{ $json.output.pain }}",
+            "decision_maker": "={{ $json.output.decision_maker }}",
+            "customer_objections": "={{ $json.output.customer_objections }}",
+            "agent_errors": "={{ $json.output.agent_errors }}",
+            "successful_pattern": "={{ $json.output.successful_pattern }}",
+            "summary": "={{ $json.output.summary }}",
+            "next_step": "={{ $json.output.next_step }}",
+            "sentiment": "={{ $json.output.sentiment }}",
+            "analysis_status": "analyzed",
+            "client_name": "={{ $('Отримання транскрипцій для аналізу').item.json.client_name }}",
+            "company": "={{ $('Отримання транскрипцій для аналізу').item.json.company }}",
+            "phone": "={{ $('Отримання транскрипцій для аналізу').item.json.phone }}",
+            "call_session_id": "={{ $('Отримання транскрипцій для аналізу').item.json.call_session_id }}",
+            "analysis_date": "={{ $now }}",
+            "recording_url": "={{ $('Обробка транскрипцій по черзі').item.json.recording_url }}",
+            "zoho_lead_id": "={{ $('Обробка транскрипцій по черзі').item.json.zoho_lead_id }}"
+          },
+          "matchingColumns": [
+            "conversation_id"
+          ],
+          "schema": [
+            {
+              "id": "analysis_date",
+              "displayName": "analysis_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_key",
+              "displayName": "lead_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "zoho_lead_id",
+              "displayName": "zoho_lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "call_session_id",
+              "displayName": "call_session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "duration_seconds",
+              "displayName": "duration_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_score",
+              "displayName": "ai_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_temperature",
+              "displayName": "lead_temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "authority",
+              "displayName": "authority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "need",
+              "displayName": "need",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timeline",
+              "displayName": "timeline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pain",
+              "displayName": "pain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision_maker",
+              "displayName": "decision_maker",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_objections",
+              "displayName": "customer_objections",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "agent_errors",
+              "displayName": "agent_errors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "successful_pattern",
+              "displayName": "successful_pattern",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "next_step",
+              "displayName": "next_step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recording_url",
+              "displayName": "recording_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "transcript",
+              "displayName": "transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "analysis_status",
+              "displayName": "analysis_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        512,
+        128
+      ],
+      "id": "c7116dd2-58b6-476f-969e-614fcc8b7a5f",
+      "name": "Збереження результату аналізу"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Щоденний запуск аналізу": {
+      "main": [
+        [
+          {
+            "node": "Отримання транскрипцій для аналізу",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отримання транскрипцій для аналізу": {
+      "main": [
+        [
+          {
+            "node": "Обробка транскрипцій по черзі",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Обробка транскрипцій по черзі": {
+      "main": [
+        [],
+        [
+          {
+            "node": "AI-аналіз голосової розмови",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI-аналіз голосової розмови",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Структурований результат аналізу": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI-аналіз голосової розмови",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI-аналіз голосової розмови": {
+      "main": [
+        [
+          {
+            "node": "Збереження результату аналізу",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Збереження результату аналізу": {
+      "main": [
+        [
+          {
+            "node": "Обробка транскрипцій по черзі",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  }
+}
