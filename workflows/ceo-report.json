@@ -1,0 +1,305 @@
+{
+  "name": "Щотижневий AI-звіт для CEO",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -416,
+        -256
+      ],
+      "id": "f1995749-5837-4364-aac7-c28304742d61",
+      "name": "Щотижневий запуск CEO-звіту"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -192,
+        -352
+      ],
+      "id": "91a0ea70-efff-46b9-a6a1-7e670060a830",
+      "name": "Отримання даних про лідів"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "CallAnalysis"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "analysis_status",
+              "lookupValue": "analyzed"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -192,
+        -160
+      ],
+      "id": "7cc29fcf-700f-4f0d-a9f5-9e30da674f31",
+      "name": "Отримання аналізу дзвінків"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        32,
+        -256
+      ],
+      "id": "215a8d50-27df-45fb-bff0-4994bdee57df",
+      "name": "Об’єднання даних для CEO"
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $('Отримання даних про лідів')\n  .all()\n  .map(item => item.json);\n\nconst analyses = $('Отримання аналізу дзвінків')\n  .all()\n  .map(item => item.json);\n\nconst normalize = (value) =>\n  String(value ?? '').trim().toLowerCase();\n\nconst toNumber = (value) => {\n  const number = Number(String(value ?? '').replace(',', '.'));\n  return Number.isFinite(number) ? number : null;\n};\n\nconst isTrue = (value) =>\n  value === true || normalize(value) === 'true';\n\nconst uniqueNonEmpty = (values) =>\n  [...new Set(values.map(String).map(v => v.trim()).filter(Boolean))];\n\nconst completedCalls = leads.filter(\n  lead => normalize(lead.call_status) === 'done'\n);\n\nconst analyzedCalls = analyses.filter(\n  call => normalize(call.analysis_status) === 'analyzed'\n);\n\nconst scores = analyzedCalls\n  .map(call => toNumber(call.ai_score))\n  .filter(score => score !== null);\n\nconst successfulCalls = analyzedCalls.filter(\n  call => normalize(call.result) === 'успішно'\n).length;\n\nconst partialCalls = analyzedCalls.filter(\n  call => normalize(call.result) === 'частково'\n).length;\n\nconst unsuccessfulCalls = analyzedCalls.filter(\n  call => normalize(call.result) === 'неуспішно'\n).length;\n\nconst hotLeads = analyzedCalls.filter(\n  call => normalize(call.lead_temperature) === 'hot'\n).length;\n\nconst warmLeads = analyzedCalls.filter(\n  call => normalize(call.lead_temperature) === 'warm'\n).length;\n\nconst coldLeads = analyzedCalls.filter(\n  call => normalize(call.lead_temperature) === 'cold'\n).length;\n\nconst averageScore = scores.length\n  ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)\n  : 0;\n\nconst conversionRate = analyzedCalls.length\n  ? Math.round((successfulCalls / analyzedCalls.length) * 100)\n  : 0;\n\nreturn [\n  {\n    json: {\n      report_date: new Date().toISOString(),\n\n      total_leads: leads.length,\n      completed_calls: completedCalls.length,\n      analyzed_calls: analyzedCalls.length,\n\n      successful_calls: successfulCalls,\n      partial_calls: partialCalls,\n      unsuccessful_calls: unsuccessfulCalls,\n\n      average_ai_score: averageScore,\n      conversion_rate: conversionRate,\n\n      hot_leads: hotLeads,\n      warm_leads: warmLeads,\n      cold_leads: coldLeads,\n\n      human_handoffs: leads.filter(\n        lead => isTrue(lead.human_handoff)\n      ).length,\n\n      customer_objections: uniqueNonEmpty(\n        analyzedCalls.map(call => call.customer_objections)\n      ),\n\n      agent_errors: uniqueNonEmpty(\n        analyzedCalls.map(call => call.agent_errors)\n      ),\n\n      successful_patterns: uniqueNonEmpty(\n        analyzedCalls.map(call => call.successful_pattern)\n      ),\n\n      recommended_next_steps: uniqueNonEmpty(\n        analyzedCalls.map(call => call.next_step)\n      ),\n\n      missing_duration_count: analyzedCalls.filter(\n        call => !call.duration_seconds\n      ).length\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -256
+      ],
+      "id": "e2866737-f331-4376-b5f6-e628da73623b",
+      "name": "Розрахунок CEO-метрик"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Сформуй щотижневий управлінський звіт для CEO компанії RevenuePulse AI.\n\nПеріод:\n{{ $json.period_start || 'початок періоду не вказаний' }}\n—\n{{ $json.period_end || $json.report_date }}\n\nCRM-МЕТРИКИ:\n- Всього лідів: {{ $json.total_leads }}\n- Завершених дзвінків: {{ $json.completed_calls }}\n- Проаналізованих дзвінків: {{ $json.analyzed_calls }}\n- Успішних: {{ $json.successful_calls }}\n- Часткових: {{ $json.partial_calls }}\n- Неуспішних: {{ $json.unsuccessful_calls }}\n- Конверсія: {{ $json.conversion_rate }}%\n- Середній AI Score: {{ $json.average_ai_score }}\n- Hot: {{ $json.hot_leads }}\n- Warm: {{ $json.warm_leads }}\n- Cold: {{ $json.cold_leads }}\n- Передач менеджеру: {{ $json.human_handoffs }}\n\nЗаперечення клієнтів:\n{{ JSON.stringify($json.customer_objections) }}\n\nПомилки голосового агента:\n{{ JSON.stringify($json.agent_errors) }}\n\nУспішні патерни:\n{{ JSON.stringify($json.successful_patterns) }}\n\nРекомендовані наступні кроки:\n{{ JSON.stringify($json.recommended_next_steps) }}\n\nДзвінки без даних про тривалість:\n{{ $json.missing_duration_count }}\n\nСформуй стислий звіт із конкретними висновками, ризиками та рекомендаціями.\nНе вигадуй показники, яких немає у вхідних даних.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Ти — старший аналітик з продажів RevenuePulse AI.\n\nТи готуєш щотижневий звіт для CEO на основі CRM-метрик та аналізу голосових розмов.\n\nПравила:\n1. Використовуй тільки передані дані.\n2. Не вигадуй причини, цифри або факти.\n3. Визнач загальний статус:\n   - Green — стабільні результати та конверсія від 60%.\n   - Yellow — конверсія 30–59% або присутні помітні ризики.\n   - Red — конверсія нижче 30% або є критичні проблеми.\n4. Виділи максимум три ключові інсайти.\n5. Виділи максимум три ризики.\n6. Дай максимум три конкретні рекомендації.\n7. Рекомендації повинні бути практичними та вимірюваними.\n8. Відповідь повинна відповідати JSON-схемі."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        -256
+      ],
+      "id": "fe5b9b76-778b-40f3-8bc7-e939cca4c617",
+      "name": "AI-формування CEO-звіту"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        -32
+      ],
+      "id": "389a4483-5c6a-44e2-bd30-ad9f95bc79e6",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"overall_status\": {\n      \"type\": \"string\",\n      \"enum\": [\"Green\", \"Yellow\", \"Red\"]\n    },\n    \"headline\": {\n      \"type\": \"string\"\n    },\n    \"executive_summary\": {\n      \"type\": \"string\"\n    },\n    \"key_insights\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"risks\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"recommendations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"priority_action\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"overall_status\",\n    \"headline\",\n    \"executive_summary\",\n    \"key_insights\",\n    \"risks\",\n    \"recommendations\",\n    \"priority_action\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        -32
+      ],
+      "id": "d2f088be-02c7-442f-b070-586c3997b922",
+      "name": "Структурований CEO-звіт"
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $json.output;\nconst metrics = $('Розрахунок CEO-метрик').first().json;\n\nconst escapeHtml = (value) =>\n  String(value ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\n\nconst shorten = (value, maxLength = 280) => {\n  const text = String(value ?? '').trim();\n\n  if (text.length <= maxLength) {\n    return escapeHtml(text);\n  }\n\n  return `${escapeHtml(text.slice(0, maxLength))}…`;\n};\n\nconst list = (items, limit = 2) => {\n  if (!Array.isArray(items) || items.length === 0) {\n    return '• Немає суттєвих';\n  }\n\n  return items\n    .slice(0, limit)\n    .map(item => `• ${shorten(item, 220)}`)\n    .join('\\n');\n};\n\nconst statuses = {\n  Green: {\n    icon: '🟢',\n    label: 'Стабільно'\n  },\n  Yellow: {\n    icon: '🟡',\n    label: 'Потрібна увага'\n  },\n  Red: {\n    icon: '🔴',\n    label: 'Критично'\n  }\n};\n\nconst status = statuses[report.overall_status] || {\n  icon: '⚪',\n  label: 'Немає оцінки'\n};\n\nconst reportDate = String(\n  metrics.period_end ||\n  metrics.report_date ||\n  new Date().toISOString()\n).slice(0, 10);\n\nconst message = [\n  `<b>📊 CEO-звіт | ${reportDate}</b>`,\n  `${status.icon} <b>${status.label}</b>`,\n  '',\n  `📈 Ліди: <b>${metrics.total_leads}</b> | Дзвінки: <b>${metrics.analyzed_calls}</b> | Конверсія: <b>${metrics.conversion_rate}%</b>`,\n  `🎯 AI Score: <b>${metrics.average_ai_score}</b> | Hot: <b>${metrics.hot_leads}</b> | Успішні: <b>${metrics.successful_calls}/${metrics.analyzed_calls}</b>`,\n  '',\n  '<b>Короткий висновок</b>',\n  shorten(report.executive_summary, 350),\n  '',\n  '<b>Основні ризики</b>',\n  list(report.risks, 2),\n  '',\n  '<b>Наступні дії</b>',\n  list(report.recommendations, 2),\n  '',\n  '<b>Головний пріоритет</b>',\n  `🎯 ${shorten(report.priority_action, 250)}`\n].join('\\n');\n\nreturn [\n  {\n    json: {\n      message\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -256
+      ],
+      "id": "148a1f18-60eb-41d8-84d4-449b824b1d71",
+      "name": "Формування Telegram-повідомлення"
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1056,
+        -256
+      ],
+      "id": "cb56a09d-79a2-4d8d-9480-68f892b77391",
+      "name": "Надсилання CEO-звіту в Telegram"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Щотижневий запуск CEO-звіту": {
+      "main": [
+        [
+          {
+            "node": "Отримання даних про лідів",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Отримання аналізу дзвінків",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отримання даних про лідів": {
+      "main": [
+        [
+          {
+            "node": "Об’єднання даних для CEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отримання аналізу дзвінків": {
+      "main": [
+        [
+          {
+            "node": "Об’єднання даних для CEO",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Об’єднання даних для CEO": {
+      "main": [
+        [
+          {
+            "node": "Розрахунок CEO-метрик",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Розрахунок CEO-метрик": {
+      "main": [
+        [
+          {
+            "node": "AI-формування CEO-звіту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI-формування CEO-звіту",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Структурований CEO-звіт": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI-формування CEO-звіту",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI-формування CEO-звіту": {
+      "main": [
+        [
+          {
+            "node": "Формування Telegram-повідомлення",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Формування Telegram-повідомлення": {
+      "main": [
+        [
+          {
+            "node": "Надсилання CEO-звіту в Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  }
+}
