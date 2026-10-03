@@ -1,0 +1,893 @@
+{
+  "name": "Голосова AI-кваліфікація нових лідів",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item) => {\n  const data = item.json;\n  const rawPhone = String(data.phone ?? '').trim();\n  const digits = rawPhone.replace(/\\D/g, '');\n\n  let phone = '';\n\n  if (rawPhone.startsWith('+')) {\n    phone = `+${digits}`;\n  } else if (digits.startsWith('00')) {\n    phone = `+${digits.slice(2)}`;\n  } else if (digits.startsWith('34')) {\n    phone = `+${digits}`;\n  } else if (/^[6789]\\d{8}$/.test(digits)) {\n    phone = `+34${digits}`;\n  } else if (digits) {\n    phone = `+${digits}`;\n  }\n\n  const leadKey = String(\n    data.lead_key || data.lead_id || ''\n  ).trim();\n\n  return {\n    json: {\n      ...data,\n      lead_key: leadKey,\n      lead_id: leadKey,\n      phone,\n      scenario:\n        data.scenario || 'BANT-кваліфікація нового ліда',\n      is_valid_phone: /^\\+[1-9]\\d{7,14}$/.test(phone),\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        -96
+      ],
+      "id": "ae7c207c-d41f-4515-902b-49e02d8be967",
+      "name": "Нормалізація даних ліда"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "46e4494f-1503-4c32-b3ed-6a9788269cb9",
+              "leftValue": "={{ $json.is_valid_phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        -96
+      ],
+      "id": "f8fb2ef5-d444-45eb-abc3-f72fc1916914",
+      "name": "Перевірка номера телефону"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        -208
+      ],
+      "id": "2bcae0f7-6947-48ea-9b44-2ed8f3d778a0",
+      "name": "Очікування 2 хвилини"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.happ.tools/api/assistants/REPLACE_WITH_HAPP_ASSISTANT_ID/originate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  phoneNumber: String($json.phone ?? '').trim(),\n\n  dynamicVariables: {\n    lead_key: String(\n      $json.lead_key ??\n      $json.lead_id ??\n      ''\n    ).trim(),\n\n    lead_id: String(\n      $json.lead_key ??\n      $json.lead_id ??\n      ''\n    ).trim(),\n\n    phone: String($json.phone ?? '').trim(),\n    client_name: String($json.client_name ?? '').trim(),\n    company: String($json.company ?? '').trim(),\n    lead_status: String($json.lead_status ?? 'new').trim(),\n    pain: String($json.pain ?? '').trim(),\n    budget: String($json.budget ?? '').trim(),\n    decision_maker: String($json.decision_maker ?? '').trim(),\n    timeline: String($json.timeline ?? '').trim(),\n\n    scenario: String(\n      $json.scenario ??\n      'BANT-кваліфікація нового ліда'\n    ).trim()\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        848,
+        -208
+      ],
+      "id": "778d58a9-8b55-41af-9d5f-d369d9016236",
+      "name": "Запуск дзвінка HAPP",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "revenuepulse-demo-callback",
+        "options": {
+          "responseCode": {
+            "values": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        112
+      ],
+      "id": "4935dd96-65b6-4f47-9e3c-1f5511da399b",
+      "name": "Вебхук результату дзвінка HAPP"
+    },
+    {
+      "parameters": {
+        "jsCode": "const root =\n  $json.body && typeof $json.body === 'object'\n    ? $json.body\n    : $json;\n\nconst nested =\n  root.data && typeof root.data === 'object'\n    ? root.data\n    : {};\n\n// Динамические переменные, переданные в HAPP при запуске звонка\nconst dynamic =\n  root.dynamic_variables ??\n  nested.dynamic_variables ??\n  root.dynamicVariables ??\n  nested.dynamicVariables ??\n  root.conversation_initiation_client_data?.dynamic_variables ??\n  nested.conversation_initiation_client_data?.dynamic_variables ??\n  {};\n\n// Параметры, полученные от инструмента save_call_report\nconst report =\n  root.params ??\n  nested.params ??\n  root.report ??\n  nested.report ??\n  {};\n\nconst analysis =\n  root.analysis ??\n  nested.analysis ??\n  {};\n\nconst metadata =\n  root.metadata ??\n  nested.metadata ??\n  {};\n\nconst text = (value) =>\n  value === null || value === undefined\n    ? ''\n    : String(value).trim();\n\n// Транскрипция может прийти как массив либо уже готовая строка\nconst rawTranscript =\n  root.transcript ??\n  nested.transcript ??\n  analysis.transcript ??\n  '';\n\nconst turns = Array.isArray(rawTranscript)\n  ? rawTranscript\n  : [];\n\nconst transcript = Array.isArray(rawTranscript)\n  ? turns\n      .filter((turn) => text(turn?.message))\n      .map((turn) => {\n        const role =\n          turn.role === 'user'\n            ? 'Клієнт'\n            : turn.role === 'agent'\n              ? 'Агент'\n              : text(turn.role);\n\n        return `${role}: ${text(turn.message)}`;\n      })\n      .join('\\n')\n  : text(rawTranscript);\n\nconst toolCalls = turns.flatMap((turn) =>\n  Array.isArray(turn?.tool_calls)\n    ? turn.tool_calls\n    : []\n);\n\nconst endCall = toolCalls.find(\n  (tool) => tool.tool_name === 'end_call'\n);\n\nlet endCallParams = endCall?.params_as_json ?? {};\n\nif (typeof endCallParams === 'string') {\n  try {\n    endCallParams = JSON.parse(endCallParams);\n  } catch {\n    endCallParams = {};\n  }\n}\n\n// Важно: ищем lead_id во всех возможных местах payload\nconst leadId = text(\n  dynamic.lead_key ??\n  dynamic.lead_id ??\n  report.lead_key ??\n  report.lead_id ??\n  root.lead_key ??\n  nested.lead_key\n);\n\nconst phone = text(\n  report.phone ??\n  root.phone ??\n  nested.phone ??\n  dynamic.phone ??\n  dynamic.phone_number ??\n  dynamic.system__caller_id\n);\n\nconst rawScore = Number(\n  report.ai_score ??\n  root.ai_score ??\n  nested.ai_score\n);\n\nconst rawDuration = Number(\n  report.duration_seconds ??\n  metadata.call_duration_secs ??\n  root.duration_seconds ??\n  nested.duration_seconds ??\n  dynamic.system__call_duration_secs ??\n  0\n);\n\nreturn [\n  {\n    json: {\n      lead_id: leadId,\n\n      client_name: text(\n        report.client_name ??\n        root.client_name ??\n        nested.client_name ??\n        dynamic.client_name\n      ),\n\n      phone,\n\n      company: text(\n        report.company ??\n        root.company ??\n        nested.company ??\n        dynamic.company\n      ),\n\n      scenario: text(\n        report.scenario ??\n        root.scenario ??\n        nested.scenario ??\n        dynamic.scenario\n      ),\n\n      budget: text(\n        report.budget ??\n        dynamic.budget\n      ),\n\n      authority: text(\n        report.authority ??\n        report.decision_maker ??\n        dynamic.authority ??\n        dynamic.decision_maker\n      ),\n\n      need: text(\n        report.need ??\n        dynamic.need\n      ),\n\n      timeline: text(\n        report.timeline ??\n        dynamic.timeline\n      ),\n\n      pain: text(\n        report.pain ??\n        dynamic.pain\n      ),\n\n      decision_maker: text(\n        report.decision_maker ??\n        report.authority ??\n        dynamic.decision_maker ??\n        dynamic.authority\n      ),\n\n      next_step: text(\n        report.next_step ??\n        endCallParams.reason\n      ),\n\n      result: text(\n        report.result\n      ),\n\n      summary: text(\n        report.summary ??\n        analysis.transcript_summary ??\n        analysis.summary\n      ),\n\n      ai_score: Number.isFinite(rawScore)\n        ? Math.max(0, Math.min(100, rawScore))\n        : null,\n\n      lead_temperature: text(\n        report.lead_temperature\n      ),\n\n      human_handoff:\n        report.human_handoff === true ||\n        text(report.human_handoff).toLowerCase() === 'true',\n\n      duration_seconds: Number.isFinite(rawDuration)\n        ? rawDuration\n        : 0,\n\n      transcript,\n\n      conversation_id: text(\n        root.conversation_id ??\n        nested.conversation_id ??\n        dynamic.system__conversation_id\n      ),\n\n      call_session_id: text(\n        root.call_session_id ??\n        nested.call_session_id ??\n        metadata.call_session_id ??\n        dynamic.call_session_id\n      ),\n\n      recording_url: text(\n        root.recordUrl ??\n        nested.recordUrl ??\n        root.recording_url ??\n        nested.recording_url ??\n        metadata.recording_url\n      ),\n\n      happ_call_status: text(\n        root.status ??\n        nested.status ??\n        report.call_status\n      ),\n\n      happ_call_successful: text(\n        analysis.call_successful ??\n        root.call_successful ??\n        nested.call_successful\n      ),\n\n      sentiment: text(\n        analysis.sentiment_analysis?.overall_label ??\n        analysis.sentiment ??\n        root.sentiment ??\n        nested.sentiment\n      ),\n\n      has_lead_id: Boolean(leadId)\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        112
+      ],
+      "id": "2f356fe6-3c14-458f-aac9-d70060ca8500",
+      "name": "Нормалізація результату дзвінка"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        272,
+        320
+      ],
+      "id": "ccf8cbcb-c610-4a86-b9e8-1d4fc71c27fd",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=={{\n`Ти — AI-аналітик відділу продажів. Проаналізуй контекст ліда та транскрипцію голосового дзвінка.\n\nПРАВИЛА:\n1. Не вигадуй фактів.\n2. Дані CRM до дзвінка можна використовувати для BANT.\n3. Результат розмови визначай насамперед за транскрипцією.\n4. Якщо інформацію не встановлено — повертай порожній рядок.\n5. Усі текстові значення повертай українською мовою.\n6. AI Score та окремі BANT-оцінки мають бути цілими числами.\n7. Поля budget, authority, need і timeline мають містити текстові факти, а не числові оцінки.\n8. Числові оцінки повертай лише в полях budget_score, authority_score, need_score і timeline_score.\n9. ai_score має дорівнювати сумі чотирьох BANT-оцінок.\n\nОЦІНКА BANT:\n- budget_score: від 0 до 25 балів.\n- authority_score: від 0 до 25 балів.\n- need_score: від 0 до 25 балів.\n- timeline_score: від 0 до 25 балів.\n\nТЕМПЕРАТУРА ЛІДА:\n- Hot: ai_score від 75 до 100.\n- Warm: ai_score від 45 до 74.\n- Cold: ai_score від 0 до 44.\n\nПРАВИЛА RESULT:\n- Успішно — кваліфікацію завершено, ціль дзвінка досягнута або зустріч підтверджено.\n- Частково — контакт відбувся, але потрібне продовження, повторний дзвінок або додаткове уточнення.\n- Неуспішно — клієнт відмовився, не зацікавлений, номер неправильний або змістовної розмови не було.\n\nДАНІ CRM:\nКлієнт: ${$json.client_name || ''}\nКомпанія: ${$json.company || ''}\nТелефон: ${$json.phone || ''}\nПопередній опис потреби: ${$json.pain || ''}\nПопередній бюджет: ${$json.budget || ''}\nОсоба, що приймає рішення: ${$json.decision_maker || ''}\nТермін: ${$json.timeline || ''}\n\nРЕЗУЛЬТАТ HAPP:\nСтатус: ${$json.happ_call_status || ''}\nУспішність з'єднання: ${$json.happ_call_successful || ''}\nНастрій: ${$json.sentiment || ''}\nПопереднє резюме: ${$json.summary || ''}\nНаступний крок: ${$json.next_step || ''}\nТривалість: ${$json.duration_seconds || 0} секунд\n\nТРАНСКРИПЦІЯ:\n${$json.transcript || ''}\n\nПоверни тільки один валідний JSON-об'єкт без Markdown, пояснень або додаткового тексту.\n\nJSON повинен мати таку структуру:\n{\n  \"budget\": \"Фактична інформація про бюджет або порожній рядок\",\n  \"authority\": \"Інформація про повноваження співрозмовника\",\n  \"need\": \"Потреба або проблема клієнта\",\n  \"timeline\": \"Термін ухвалення рішення або запуску\",\n  \"budget_score\": 0,\n  \"authority_score\": 0,\n  \"need_score\": 0,\n  \"timeline_score\": 0,\n  \"pain\": \"Головна проблема клієнта\",\n  \"decision_maker\": \"Особа, яка приймає рішення\",\n  \"next_step\": \"Конкретний погоджений наступний крок\",\n  \"result\": \"Успішно, Частково або Неуспішно\",\n  \"summary\": \"Короткий підсумок розмови українською мовою\",\n  \"ai_score\": 0,\n  \"lead_temperature\": \"Hot, Warm або Cold\",\n  \"human_handoff\": false,\n  \"agent_errors\": \"Помилки агента або порожній рядок\",\n  \"customer_objections\": \"Заперечення клієнта або порожній рядок\",\n  \"successful_pattern\": \"Успішний патерн розмови або порожній рядок\"\n}`\n}}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        336,
+        112
+      ],
+      "id": "32bab0ff-aa04-493e-a1a5-f2514f8fabf3",
+      "name": "AI-аналіз BANT і скоринг"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base =\n  $('Нормалізація результату дзвінка')\n    .first()\n    .json;\n\nlet ai =\n  $json.output ??\n  $json.text ??\n  $json.response ??\n  $json;\n\nif (typeof ai === 'string') {\n  const cleaned = ai\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n\n  try {\n    ai = JSON.parse(cleaned);\n  } catch {\n    throw new Error(\n      `AI повернув невалідний JSON: ${cleaned}`\n    );\n  }\n}\n\nconst score = Math.max(\n  0,\n  Math.min(100, Number(ai.ai_score) || 0)\n);\n\nconst temperature =\n  ai.lead_temperature ||\n  (score >= 75\n    ? 'Hot'\n    : score >= 45\n      ? 'Warm'\n      : 'Cold');\n\nreturn [{\n  json: {\n    ...base,\n    ...ai,\n\n    lead_id: base.lead_id,\n    client_name: base.client_name,\n    phone: base.phone,\n    company: base.company,\n    scenario: base.scenario,\n\n    ai_score: score,\n    lead_temperature: temperature,\n\n    human_handoff:\n      ai.human_handoff === true ||\n      String(ai.human_handoff).toLowerCase() === 'true',\n\n    duration_seconds: base.duration_seconds,\n    transcript: base.transcript,\n    conversation_id: base.conversation_id,\n    call_session_id: base.call_session_id,\n    recording_url: base.recording_url,\n\n    has_lead_id: Boolean(base.lead_id)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        128
+      ],
+      "id": "89308540-16ed-41f3-b525-5bb61e33f068",
+      "name": "Об’єднання контексту та AI-оцінки"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -96
+      ],
+      "id": "5225dac6-5644-4ca6-b747-07725dcfa4e1",
+      "name": "Новий лід у Google Sheets"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "phone": "={{ $json.phone }}",
+            "pain": "={{ $json.pain || $json.need || '' }}",
+            "updated_at": "={{ $now.toISO() }}",
+            "recording_url": "={{ $json.recording_url || '' }}",
+            "call_session_id": "={{ $json.call_session_id || '' }}",
+            "conversation_id": "={{ $json.conversation_id || '' }}",
+            "human_handoff": "={{ $json.human_handoff ?? false }}",
+            "next_step": "={{ $json.next_step || '' }}",
+            "summary": "={{ $json.summary || '' }}",
+            "result": "={{ $json.result || '' }}",
+            "lead_temperature": "={{ $json.lead_temperature || 'Cold' }}",
+            "ai_score": "={{ $json.ai_score ?? 0 }}",
+            "call_status": "={{ $json.happ_call_status || $json.call_status || 'done' }}",
+            "timeline": "={{ $json.timeline || '' }}",
+            "decision_maker": "={{ $json.decision_maker || $json.authority || '' }}",
+            "budget": "={{ $json.budget || '' }}",
+            "lead_key": "={{ $json.lead_id }}"
+          },
+          "matchingColumns": [
+            "lead_key"
+          ],
+          "schema": [
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "lead_key",
+              "displayName": "lead_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "zoho_lead_id",
+              "displayName": "zoho_lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "scenario",
+              "displayName": "scenario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "pain",
+              "displayName": "pain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision_maker",
+              "displayName": "decision_maker",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timeline",
+              "displayName": "timeline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "call_status",
+              "displayName": "call_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_score",
+              "displayName": "ai_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_temperature",
+              "displayName": "lead_temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "next_step",
+              "displayName": "next_step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "human_handoff",
+              "displayName": "human_handoff",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "call_session_id",
+              "displayName": "call_session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recording_url",
+              "displayName": "recording_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        832,
+        128
+      ],
+      "id": "7f9df628-550c-452c-acac-7ba8d173dfc2",
+      "name": "Оновлення ліда після дзвінка",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVENUEPULSE_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "CallAnalysis"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "lead_key": "={{ $json.lead_key }}",
+            "phone": "={{ $json.phone }}",
+            "recording_url": "={{ $json.recording_url }}",
+            "analysis_status": "pending",
+            "call_session_id": "={{ $json.call_session_id }}",
+            "client_name": "={{ $('Нормалізація результату дзвінка').item.json.client_name }}",
+            "company": "={{ $('Нормалізація результату дзвінка').item.json.company }}",
+            "duration_seconds": "={{ $('Нормалізація результату дзвінка').item.json.duration_seconds }}",
+            "transcript": "={{ $('Нормалізація результату дзвінка').item.json.transcript }}"
+          },
+          "matchingColumns": [
+            "conversation_id"
+          ],
+          "schema": [
+            {
+              "id": "analysis_date",
+              "displayName": "analysis_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_key",
+              "displayName": "lead_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "zoho_lead_id",
+              "displayName": "zoho_lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "call_session_id",
+              "displayName": "call_session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "duration_seconds",
+              "displayName": "duration_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_score",
+              "displayName": "ai_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_temperature",
+              "displayName": "lead_temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "authority",
+              "displayName": "authority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "need",
+              "displayName": "need",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timeline",
+              "displayName": "timeline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pain",
+              "displayName": "pain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision_maker",
+              "displayName": "decision_maker",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_objections",
+              "displayName": "customer_objections",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "agent_errors",
+              "displayName": "agent_errors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "successful_pattern",
+              "displayName": "successful_pattern",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "next_step",
+              "displayName": "next_step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recording_url",
+              "displayName": "recording_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "transcript",
+              "displayName": "transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "analysis_status",
+              "displayName": "analysis_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1040,
+        128
+      ],
+      "id": "13569e7e-b271-4bfe-9a5f-af133b8fb98e",
+      "name": "Додавання дзвінка до черги аналізу"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Нормалізація даних ліда": {
+      "main": [
+        [
+          {
+            "node": "Перевірка номера телефону",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Перевірка номера телефону": {
+      "main": [
+        [
+          {
+            "node": "Очікування 2 хвилини",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Очікування 2 хвилини": {
+      "main": [
+        [
+          {
+            "node": "Запуск дзвінка HAPP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Вебхук результату дзвінка HAPP": {
+      "main": [
+        [
+          {
+            "node": "Нормалізація результату дзвінка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нормалізація результату дзвінка": {
+      "main": [
+        [
+          {
+            "node": "AI-аналіз BANT і скоринг",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI-аналіз BANT і скоринг",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI-аналіз BANT і скоринг": {
+      "main": [
+        [
+          {
+            "node": "Об’єднання контексту та AI-оцінки",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Об’єднання контексту та AI-оцінки": {
+      "main": [
+        [
+          {
+            "node": "Оновлення ліда після дзвінка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Новий лід у Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Нормалізація даних ліда",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Оновлення ліда після дзвінка": {
+      "main": [
+        [
+          {
+            "node": "Додавання дзвінка до черги аналізу",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  }
+}
