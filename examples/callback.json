@@ -1,0 +1,24 @@
+{
+  "body": {
+    "conversation_id": "demo-conversation-001",
+    "call_session_id": "demo-session-001",
+    "status": "done",
+    "dynamic_variables": {
+      "lead_key": "DEMO-001",
+      "client_name": "Demo Contact",
+      "company": "Example B2B Services",
+      "phone": "+12025550123"
+    },
+    "metadata": { "call_duration_secs": 120 },
+    "params": {
+      "budget": "Бюджет обговорено, остаточна сума не погоджена",
+      "decision_maker": "Співрозмовник приймає рішення",
+      "next_step": "Підготувати демонстрацію рішення",
+      "human_handoff": true
+    },
+    "transcript": [
+      { "role": "agent", "message": "Який процес ви хочете покращити?" },
+      { "role": "user", "message": "Потрібно швидше обробляти звернення. Готові обговорити демонстрацію." }
+    ]
+  }
+}
