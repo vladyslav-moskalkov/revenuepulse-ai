@@ -1,0 +1,29 @@
+{
+  "synthetic": true,
+  "warning": "Invented offline examples. No calls were made; do not dial demonstration numbers.",
+  "leads": [
+    { "lead_key": "DEMO-001", "call_status": "done", "human_handoff": true },
+    { "lead_key": "DEMO-002", "call_status": "done", "human_handoff": false },
+    { "lead_key": "DEMO-003", "call_status": "done", "human_handoff": false },
+    { "lead_key": "DEMO-004", "call_status": "done", "human_handoff": false },
+    { "lead_key": "DEMO-005", "call_status": "done", "human_handoff": false },
+    { "lead_key": "DEMO-006", "call_status": "new", "human_handoff": false }
+  ],
+  "analyses": [
+    { "conversation_id": "demo-001", "analysis_status": "analyzed", "ai_score": 90, "result": "Успішно", "lead_temperature": "Hot", "duration_seconds": 120, "customer_objections": "", "agent_errors": "", "successful_pattern": "Уточнення наступного кроку", "next_step": "Демонстрація" },
+    { "conversation_id": "demo-002", "analysis_status": "analyzed", "ai_score": 80, "result": "Успішно", "lead_temperature": "Hot", "duration_seconds": 110, "customer_objections": "", "agent_errors": "", "successful_pattern": "Уточнення наступного кроку", "next_step": "Пропозиція" },
+    { "conversation_id": "demo-003", "analysis_status": "analyzed", "ai_score": 75, "result": "Частково", "lead_temperature": "Hot", "duration_seconds": 100, "customer_objections": "Потрібно уточнити бюджет", "agent_errors": "", "successful_pattern": "", "next_step": "Повторний контакт" },
+    { "conversation_id": "demo-004", "analysis_status": "analyzed", "ai_score": 55, "result": "Частково", "lead_temperature": "Warm", "duration_seconds": 90, "customer_objections": "Потрібно уточнити бюджет", "agent_errors": "Не погоджено дату", "successful_pattern": "", "next_step": "Уточнення терміну" },
+    { "conversation_id": "demo-005", "analysis_status": "analyzed", "ai_score": 40, "result": "Неуспішно", "lead_temperature": "Cold", "duration_seconds": 80, "customer_objections": "Не на часі", "agent_errors": "", "successful_pattern": "", "next_step": "" },
+    { "conversation_id": "demo-006", "analysis_status": "pending", "ai_score": 100, "result": "Успішно", "lead_temperature": "Hot", "duration_seconds": 0 }
+  ],
+  "ceoOutput": {
+    "overall_status": "Yellow",
+    "headline": "Демонстраційний огляд кваліфікації",
+    "executive_summary": "З п'яти проаналізованих розмов дві завершилися успішно. Це частка успішних розмов, а не продажів.",
+    "key_insights": ["Три розмови мають збережену позначку Hot"],
+    "risks": ["У двох розмовах потрібно уточнити бюджет"],
+    "recommendations": ["Переглянути погоджені наступні кроки"],
+    "priority_action": "Підготувати демонстрацію для зацікавленого ліда"
+  }
+}
